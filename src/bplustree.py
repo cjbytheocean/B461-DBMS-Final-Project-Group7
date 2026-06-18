@@ -99,7 +99,14 @@ class BPlusTree:
 
     def _find_leaf_page(self, key: int) -> int:
         # [STUDENT TODO] Traverse internal nodes until you reach the target leaf.
-        raise NotImplementedError("Students should implement leaf traversal.")
+        root = self._read_node(self.root_page_id)
+        while not root.is_leaf:
+            counter = 0
+            for i in range(len(root.keys)):
+                if key >= root.keys[i]: counter += 1
+                else: break
+            root = self._read_node(root.children[counter])
+        return root.page_id
 
     def insert(self, key: int, value: int) -> None:
         # [STUDENT TODO] Insert the key/value pair into the correct leaf, split
@@ -118,7 +125,18 @@ class BPlusTree:
     ) -> tuple[int, int] | None:
         # [STUDENT TODO] Keep keys sorted within each leaf and define the
         # duplicate-key policy.
-        raise NotImplementedError("Students should implement leaf insertion.")
+        lidx = -1
+        for i in range(len(node.keys)):
+            if node.keys[i] == key: raise Exception # duplicate
+            elif node.keys[i] < key: lidx = i
+            else: pass
+        node.keys.insert(lidx + 1, key)
+        node.values.insert(lidx + 1, value)
+        if len(node.keys) == self.order:
+            return self._split_leaf(node)
+        else:
+            self._write_node(node)
+            return None
 
     def _insert_into_internal(
         self,
@@ -132,7 +150,19 @@ class BPlusTree:
 
     def _split_leaf(self, node: BPlusTreeNode) -> tuple[int, int]:
         # [STUDENT TODO] Split an overflowing leaf and maintain the leaf links.
-        raise NotImplementedError("Students should implement leaf splitting.")
+        mp_idx = len(node.keys) // 2
+        left = (node.keys[:mp_idx], node.values[:mp_idx])
+        right = (node.keys[mp_idx:], node.values[mp_idx:])
+        node.keys = left[0]
+        node.values = left[1]
+        rhs = self._allocate_node(True)
+        rhs.keys = right[0]
+        rhs.values = right[1]
+        rhs.next_leaf = node.next_leaf
+        node.next_leaf = rhs.page_id
+        self._write_node(node)
+        self._write_node(rhs)
+        return (rhs.page_id, rhs.keys[0])
 
     def _split_internal(self, node: BPlusTreeNode) -> tuple[int, int]:
         # [STUDENT TODO] Split an overflowing internal node and return the
@@ -142,7 +172,10 @@ class BPlusTree:
     def search(self, key: int) -> int | None:
         # [STUDENT TODO] Use the leaf traversal helper and scan the leaf for an
         # exact-match lookup.
-        raise NotImplementedError("Students should implement search.")
+        leaf = self._read_node(self._find_leaf_page(key))
+        for i in range(len(leaf.keys)):
+            if leaf.keys[i] == key: return leaf.values[i]
+        return None
 
     def range_search(self, start_key: int, end_key: int) -> list[tuple[int, int]]:
         # [STUDENT TODO] Walk the linked leaf pages to support range queries.

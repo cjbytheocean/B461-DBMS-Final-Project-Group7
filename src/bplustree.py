@@ -98,7 +98,6 @@ class BPlusTree:
         self.buffer_pool_manager.unpin_page(node.page_id, is_dirty=True)
 
     def _find_leaf_page(self, key: int) -> int:
-        # [STUDENT TODO] Traverse internal nodes until you reach the target leaf.
         root = self._read_node(self.root_page_id)
         while not root.is_leaf:
             counter = 0
@@ -123,8 +122,6 @@ class BPlusTree:
         key: int,
         value: int,
     ) -> tuple[int, int] | None:
-        # [STUDENT TODO] Keep keys sorted within each leaf and define the
-        # duplicate-key policy.
         lidx = -1
         for i in range(len(node.keys)):
             if node.keys[i] == key: raise Exception # duplicate
@@ -149,7 +146,6 @@ class BPlusTree:
         raise NotImplementedError("Students should implement internal insertion.")
 
     def _split_leaf(self, node: BPlusTreeNode) -> tuple[int, int]:
-        # [STUDENT TODO] Split an overflowing leaf and maintain the leaf links.
         mp_idx = len(node.keys) // 2
         left = (node.keys[:mp_idx], node.values[:mp_idx])
         right = (node.keys[mp_idx:], node.values[mp_idx:])
@@ -170,8 +166,6 @@ class BPlusTree:
         raise NotImplementedError("Students should implement internal splitting.")
 
     def search(self, key: int) -> int | None:
-        # [STUDENT TODO] Use the leaf traversal helper and scan the leaf for an
-        # exact-match lookup.
         leaf = self._read_node(self._find_leaf_page(key))
         for i in range(len(leaf.keys)):
             if leaf.keys[i] == key: return leaf.values[i]

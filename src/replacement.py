@@ -74,10 +74,14 @@ class LRUReplacer(Replacer):
             self._order.pop(frame_id, None)
 
     def evict(self) -> int | None:
-        # [STUDENT TODO] Walk the LRU order from oldest to newest and return
         # the first evictable frame. Remove it from the policy state before
         # returning.
-        raise NotImplementedError("Students should implement LRUReplacer.evict.")
+
+        while self._order:
+            frame_id, _ = self._order.popitem(last=False)
+            return frame_id
+
+        return None
 
     def remove(self, frame_id: int) -> None:
         self._order.pop(frame_id, None)
@@ -100,7 +104,6 @@ class ClockReplacer(Replacer):
         self.evictable = [False for _ in range(pool_size)]
 
     def record_access(self, frame_id: int) -> None:
-        # [STUDENT TODO] Access should usually set the reference bit so a page
         # gets a second chance during eviction.
         self.reference_bits[frame_id] = 1
 
@@ -110,9 +113,29 @@ class ClockReplacer(Replacer):
             self.reference_bits[frame_id] = 1
 
     def evict(self) -> int | None:
-        # [STUDENT TODO] Advance the clock hand, skip non-evictable frames,
         # clear reference bits on the first pass, and evict on the second.
-        raise NotImplementedError("Students should implement ClockReplacer.evict.")
+
+        checked_count = 0
+
+        while checked_count < self.pool_size * 2:
+            frame_id = self.clock_hand
+
+            if not self.evictable[frame_id]:
+                self.clock_hand = (self.clock_hand + 1) % self.pool_size
+                checked_count += 1
+                continue
+
+            if self.reference_bits[frame_id] == 1:
+                self.reference_bits[frame_id] = 0
+                self.clock_hand = (self.clock_hand + 1) % self.pool_size
+                checked_count += 1
+                continue
+
+            self.evictable[frame_id] = False
+            self.clock_hand = (self.clock_hand + 1) % self.pool_size
+            return frame_id
+
+        return None
 
     def remove(self, frame_id: int) -> None:
         self.evictable[frame_id] = False

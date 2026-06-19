@@ -65,7 +65,6 @@ class BufferPoolManager:
         return self.page_table.get(page_id)
 
     def _mark_frame_evictable(self, frame_id: int, evictable: bool) -> None:
-        # [STUDENT TODO] Coordinate pin/unpin state with the replacement policy.
         self.replacer.record_access(frame_id)
         self.replacer.set_evictable(frame_id, evictable)
 
@@ -73,14 +72,56 @@ class BufferPoolManager:
         if self.free_list:
             return self.free_list.pop(0)
 
-        # [STUDENT TODO] Evict a victim frame, flush it if dirty, and recycle
         # the frame id for the next page.
-        raise NotImplementedError("Students should implement eviction.")
+        victim_frame = self.replacer.evict()
+
+        if victim_frame is None:
+            return self.free_list.pop(0)
+
+        victim_page_id = None
+        for page_id, frame_id in self.page_table.items():
+            if frame_id == victim_frame:
+                victim_page_id = page_id
+                break
+
+        if victim_page_id is not None:
+            page = self.frames[victim_frame]
+            if page is not None and page.is_dirty:
+                self.disk_manager.write_page(page)
+                self.flush_count += 1
+            self.page_table.pop(victim_page_id, None)
+
+        self.replacer.remove(victim_frame)
+        self.frames[victim_frame] = None
+        self.eviction_count += 1
+
+        return victim_frame
 
     def fetch_page(self, page_id: int) -> Page:
-        # [STUDENT TODO] Implement hit detection, miss handling, pinning, and
         # stats updates here.
-        raise NotImplementedError("Students should implement fetch_page.")
+
+        frame_id = self._get_frame_id(page_id)
+
+        if frame_id is not None:
+            self.hit_count += 1
+            page = self.frames[frame_id]
+            self.replacer.record_access(frame_id)
+            self._mark_frame_evictable(frame_id, False)
+            page.pin_count += 1
+            return page
+
+        self.miss_count += 1
+
+        frame_id = self._evict_if_needed()
+        page = self.disk_manager.read_page(page_id)
+
+        self.frames[frame_id] = page
+        self.page_table[page_id] = frame_id
+
+        page.pin_count = 1
+        self._mark_frame_evictable(frame_id, False)
+
+        return page
 
     def new_page(self) -> Page:
         # [STUDENT TODO] Allocate a new disk page and place it in a buffer
@@ -88,9 +129,26 @@ class BufferPoolManager:
         raise NotImplementedError("Students should implement new_page.")
 
     def unpin_page(self, page_id: int, is_dirty: bool = False) -> bool:
-        # [STUDENT TODO] Decrement the pin count, mark the page dirty if
         # needed, and make it evictable once no clients still hold it.
-        raise NotImplementedError("Students should implement unpin_page.")
+
+        frame_id = self._get_frame_id(page_id)
+
+        if frame_id is None:
+            return False
+
+        page = self.frames[frame_id]
+        if page is None:
+            return False
+
+        if is_dirty:
+            page.is_dirty = True
+
+        page.pin_count = max(0, page.pin_count - 1)
+
+        if page.pin_count == 0:
+            self._mark_frame_evictable(frame_id, True)
+
+        return True
 
     def flush_page(self, page_id: int) -> bool:
         # [STUDENT TODO] Write a single page back to disk and clear its dirty

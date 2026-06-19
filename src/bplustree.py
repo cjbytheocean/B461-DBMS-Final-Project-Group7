@@ -108,13 +108,20 @@ class BPlusTree:
         return root.page_id
 
     def insert(self, key: int, value: int) -> None:
-        # [STUDENT TODO] Insert the key/value pair into the correct leaf, split
-        # overflowing nodes, and update the root if needed.
-        raise NotImplementedError("Students should implement insert.")
+        insertion = self._insert_recursive(self.root_page_id, key, value)
+        if insertion:
+            page_id, new_key = insertion
+            new_node = self._allocate_node(False)
+            new_node.keys.append(new_key)
+            new_node.children.append(self.root_page_id)
+            new_node.children.append(page_id)
+            self._write_node(new_node)
+            self.root_page_id = new_node.page_id
 
     def _insert_recursive(self, page_id: int, key: int, value: int) -> tuple[int, int] | None:
-        # [STUDENT TODO] Use recursion to bubble split information back up the tree.
-        raise NotImplementedError("Students should implement recursive insert.")
+        node = self._read_node(page_id)
+        if node.is_leaf: return self._insert_into_leaf(node, key, value)
+        else: return self._insert_into_internal(node, key, value)
 
     def _insert_into_leaf(
         self,
@@ -141,9 +148,24 @@ class BPlusTree:
         key: int,
         value: int,
     ) -> tuple[int, int] | None:
-        # [STUDENT TODO] Route insertion through the right child and handle a
-        # child split by inserting a promoted separator key.
-        raise NotImplementedError("Students should implement internal insertion.")
+        idx = 0
+        for i in range(len(node.keys)):
+            if key <= node.keys[i]: break
+            idx += 1
+        ins = self._insert_recursive(node.children[idx], key, value)
+        if ins:
+            page_id, new_key = ins
+            c = 0
+            for v in node.keys:
+                if v < new_key:
+                    c += 1
+            node.keys.insert(c, new_key)
+            node.children.insert(c + 1, page_id)
+            if len(node.keys) == self.order: return self._split_internal(node)
+            else:
+                self._write_node(node)
+                return None
+        else: return None
 
     def _split_leaf(self, node: BPlusTreeNode) -> tuple[int, int]:
         mp_idx = len(node.keys) // 2
@@ -161,9 +183,20 @@ class BPlusTree:
         return (rhs.page_id, rhs.keys[0])
 
     def _split_internal(self, node: BPlusTreeNode) -> tuple[int, int]:
-        # [STUDENT TODO] Split an overflowing internal node and return the
-        # promoted separator key.
-        raise NotImplementedError("Students should implement internal splitting.")
+        mp_idx = len(node.keys) // 2
+        mid_key = node.keys[mp_idx]
+        left_internal = node.keys[:mp_idx]
+        left_children = node.children[:mp_idx+1]
+        right_internal = node.keys[mp_idx+1:]
+        right_children = node.children[mp_idx+1:]
+        new_node = self._allocate_node(False)
+        new_node.keys = right_internal
+        new_node.children = right_children
+        node.keys = left_internal
+        node.children = left_children
+        self._write_node(new_node)
+        self._write_node(node)
+        return (new_node.page_id, mid_key)
 
     def search(self, key: int) -> int | None:
         leaf = self._read_node(self._find_leaf_page(key))
@@ -172,8 +205,14 @@ class BPlusTree:
         return None
 
     def range_search(self, start_key: int, end_key: int) -> list[tuple[int, int]]:
-        # [STUDENT TODO] Walk the linked leaf pages to support range queries.
-        raise NotImplementedError("Students should implement range_search.")
+        leaf = self._read_node(self._find_leaf_page(start_key))
+        res = []
+        while leaf.next_leaf is not None:
+            res += [(leaf.keys[i], leaf.values[i]) for i in range(len(leaf.keys)) if leaf.keys[i] >= start_key and leaf.keys[i] <= end_key]
+            leaf = self._read_node(leaf.next_leaf)
+
+        res += [(leaf.keys[i], leaf.values[i]) for i in range(len(leaf.keys)) if leaf.keys[i] >= start_key and leaf.keys[i] <= end_key]
+        return res
 
 
 __all__ = ["BPlusTreeNode", "BPlusTree"]

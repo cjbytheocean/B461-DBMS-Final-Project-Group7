@@ -124,9 +124,18 @@ class BufferPoolManager:
         return page
 
     def new_page(self) -> Page:
-        # [STUDENT TODO] Allocate a new disk page and place it in a buffer
-        # frame.
-        raise NotImplementedError("Students should implement new_page.")
+        frame_id = self._evict_if_needed()
+
+        page_id = self.disk_manager.allocate_page()
+        page = Page(page_id=page_id)
+        page.pin_count = 1
+        page.is_dirty = False
+
+        self.frames[frame_id] = page
+        self.page_table[page_id] = frame_id
+        self._mark_frame_evictable(frame_id, False)
+
+        return page
 
     def unpin_page(self, page_id: int, is_dirty: bool = False) -> bool:
         # needed, and make it evictable once no clients still hold it.
@@ -151,18 +160,49 @@ class BufferPoolManager:
         return True
 
     def flush_page(self, page_id: int) -> bool:
-        # [STUDENT TODO] Write a single page back to disk and clear its dirty
-        # flag.
-        raise NotImplementedError("Students should implement flush_page.")
+        frame_id = self._get_frame_id(page_id)
+        if frame_id is None:
+            return False
+
+        page = self.frames[frame_id]
+        if page is None:
+            return False
+
+        if page.is_dirty:
+            self.disk_manager.write_page(page)
+            self.flush_count += 1
+
+        page.is_dirty = False
+        return True
 
     def flush_all_pages(self) -> None:
-        # [STUDENT TODO] Flush every dirty page currently cached in memory.
-        raise NotImplementedError("Students should implement flush_all_pages.")
+        for page in list(self.frames):
+            if page is not None and page.is_dirty:
+                self.flush_page(page.page_id)
 
     def delete_page(self, page_id: int) -> bool:
-        # [STUDENT TODO] Remove an unpinned page from the buffer and then clear
-        # its disk slot.
-        raise NotImplementedError("Students should implement delete_page.")
+        frame_id = self._get_frame_id(page_id)
+
+        if frame_id is not None:
+            page = self.frames[frame_id]
+
+            if page is not None and page.pin_count > 0:
+                return False
+
+            self.page_table.pop(page_id, None)
+            self.replacer.remove(frame_id)
+            self.frames[frame_id] = None
+            self.free_list.append(frame_id)
+
+        try:
+            deleted = self.disk_manager.delete_page(page_id)
+        except IndexError:
+            return False
+
+        if deleted:
+            self.delete_count += 1
+
+        return deleted
 
     def get_stats(self) -> dict[str, float]:
         disk_stats = self.disk_manager.get_stats()

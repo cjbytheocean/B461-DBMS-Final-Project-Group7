@@ -131,7 +131,10 @@ class BPlusTree:
     ) -> tuple[int, int] | None:
         lidx = -1
         for i in range(len(node.keys)):
-            if node.keys[i] == key: raise Exception # duplicate
+            if node.keys[i] == key:
+                node.values[i] = value
+                self._write_node(node)
+                return None
             elif node.keys[i] < key: lidx = i
             else: pass
         node.keys.insert(lidx + 1, key)
